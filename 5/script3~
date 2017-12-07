@@ -1,0 +1,5 @@
+#!/bin/bash
+for t in {30000..40000..1000}
+do
+	smpirun --cfg=smpi/bcast:mpich --cfg=smpi/running_power:0.054Gf -np 100 -platform ./cluster_1600.xml -hostfile ./hostfile_1600 ./matmul_outerproduct_v3 $(($t*8)) 9 >> results3.txt
+done

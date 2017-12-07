@@ -1,0 +1,3 @@
+
+smpirun -np 4 -platform ./cluster_1600.xml -hostfile ./hostfile_1600 ./matmul_outerproduct_v1 2000 >> result1.txt
+
