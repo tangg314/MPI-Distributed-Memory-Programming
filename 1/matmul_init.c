@@ -1,0 +1,526 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <mpi.h>
+#include <string.h>
+#include <math.h>
+
+#define RAND_SEED 842270
+
+#ifdef FOLDING
+#define malloc(x) SMPI_SHARED_MALLOC(x)
+#define free(x) SMPI_SHARED_FREE(x)
+#endif
+
+///////////////////////////////////////////////////////
+//// program_abort() and print_usage() functions //////
+///////////////////////////////////////////////////////
+
+static void program_abort(char *exec_name, char *message);
+static void print_usage();
+
+// Abort, printing the usage information only if the
+// first argument is non-NULL (and set to argv[0]), and
+// printing the second argument regardless.
+static void program_abort(char *exec_name, char *message) {
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD,&my_rank);
+  if (my_rank == 0) {
+    if (message) {
+      fprintf(stderr,"%s",message);
+    }
+    if (exec_name) {
+      print_usage(exec_name);
+    }
+  }
+  MPI_Abort(MPI_COMM_WORLD, 1);
+  exit(1);
+}
+
+// Print the Usage information
+static void print_usage(char *exec_name) {
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD,&my_rank);
+
+  if (my_rank == 0) {
+    fprintf(stderr,"MPIRUN arguments:\n");
+    fprintf(stderr,"\t<num processes>: number of MPI processes\n");
+    fprintf(stderr,"\t<XML platform file>: a simgrid platform description file\n");
+    fprintf(stderr,"\t<host file>: MPI host file with host names from the XML platform file\n");
+    fprintf(stderr,"PROGRAM arguments:\n");
+    fprintf(stderr,"\n");
+  }
+}
+
+
+///////////////////////////
+////// Main function //////
+///////////////////////////
+
+int main(int argc, char *argv[])
+{
+  // Parse command-line arguments (not using getopt because not thread-safe
+  // and annoying anyway). The code below ignores extraneous command-line
+  // arguments, which is lame, but we're not in the business of developing
+  // a cool thread-safe command-line argument parser.
+
+  //matrix indices
+  int i;
+  int j;
+  int k;
+
+  double start_time;
+
+  MPI_Init(&argc, &argv);
+  
+  // Message string optional argument
+  char *message_string = "";
+
+
+  // Determine rank and number of processes
+  int num_procs;
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+
+  //Size of matrix 
+  double p = sqrt((double)num_procs);
+  double size = N / p;
+  double sizeSq = size * size;
+  int sizeSqI = (int)sizeSq;
+  int sizeI = (int)sqrt(size);
+
+  //create processor grid
+  //MPI processor grid
+  int grid_size[2];
+  int coords[2];
+  int period[2]={0, 0};
+
+  MPI_Dims_create(num_procs, 2, grid_size);
+  MPI_Cart_create(MPI_COMM_WORLD, 2, grid_size, period, 0, &MPI_COMM_WORLD);
+  MPI_Cart_coords(MPI_COMM_WORLD, rank, 2, coords);
+  //fprintf(stderr,"rank = %d, num_procs = %d \n", rank, num_procs);
+
+  /////////////////////////////////////////////////////////////////////////////
+  //////////////////////////// TO IMPLEMENT: BEGIN ////////////////////////////
+  ///////////////////////////////////////////////////////////////////////////// 
+  int h;
+  int index = 0;
+
+  //for matrix A
+  int *buffer = malloc(sizeof(int) * 2);
+  MPI_Request request = MPI_REQUEST_NULL;
+
+  //for matrix B
+  int *buffer2 = malloc(sizeof(int) * 2);
+  int r = 0;
+  MPI_Request request2 = MPI_REQUEST_NULL;
+
+  //check input
+  //p must be perfect square
+  if(sqrt(num_procs) != floor(sqrt(num_procs))){
+	fprintf(stderr, "p is not a perfect square.\n");
+  }
+
+  //sqrt(p) does not divide N
+  else if((N % (int)sqrt(num_procs) ) != 0){
+	fprintf(stderr, "sqrt(p) does not divide N\n");
+	fprintf(stderr, "sqrt(p) = %d, N = %d \n", (int)sqrt(num_procs), N);
+  }
+
+  //input ok, run program
+  else{	
+  
+  	//create matrix A
+  	double* A = malloc(sizeof(double) * sizeSq);
+  	//create matrix B
+  	double* B = malloc(sizeof(double) * sizeSq);
+  	//create matrix C
+  	double* C = malloc(sizeof(double) * sizeSq);
+	//create bufferA
+	double* bufferA = malloc(sizeof(double) * sizeSq);
+	//create bufferB
+	double* bufferB = malloc(sizeof(double) * sizeSq);
+  
+  
+  	//initialize matrixes
+  	//initialize matrix A and print matrix A 	
+	if(rank == 0){
+		h = 0;
+		//one matrix A
+  		for(i = 0; i < size; i++){
+			for(j = 0; j < size; j++){
+				A[h] = i;
+				h++;
+			}
+  		}
+	}
+
+	else{
+		h = 0;
+		for(i = coords[0] * size; i < coords[0] * size + size; i++){
+			for(j = coords[1] * size; j < coords[1] * size + size; j++){
+				A[h] = i;
+				h++;			
+			}
+		}
+	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	//print test
+	fprintf(stdout, "Block of A on rank %d at coordinates (%d, %d)\n", rank, coords[0], coords[1]);
+	for(i = 0; i < size; i++){
+		for(j = 0; j < size; j++){
+			index = (int)(i*size + j);
+        		fprintf(stdout, "%f ", A[index]);
+		}
+
+		fprintf(stdout, "\n");
+  	}
+	fprintf(stdout, "\n");
+	
+	MPI_Barrier(MPI_COMM_WORLD);
+
+
+  	//initialize matrix B and print matrix B  	
+	if(rank == 0){
+		h = 0;
+		//one matrix B
+  		for(i = 0; i < size; i++){
+			for(j = 0; j < size; j++){
+				B[h] = i + j;
+				h++;
+			}
+  		}
+	}
+
+	else{
+		h = 0;
+		for(i = coords[0] * size; i < coords[0] * size + size; i++){
+			for(j = coords[1] * size; j < coords[1] * size + size; j++){
+				B[h] = i + j;
+				h++;			
+			}
+		}
+	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	//print test
+	fprintf(stdout, "Block of B on rank %d at coordinates (%d, %d)\n", rank, coords[0], coords[1]);
+	for(i = 0; i < size; i++){
+		for(j = 0; j < size; j++){
+			index = (int)(i*size + j);
+        		fprintf(stdout, "%f ", B[index]);
+		}
+
+		fprintf(stdout, "\n");
+  	}
+	fprintf(stdout, "\n");
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	
+	//initialize matrix C
+	h = 0;
+  	for(i = 0; i < size; i++){
+		for(j = 0; j < size; j++){
+			C[h] = 0;
+			h++;
+		}
+  	}
+
+	MPI_Barrier(MPI_COMM_WORLD);	
+
+	//print test
+	fprintf(stdout, "Block of C on rank %d at coordinates (%d, %d)\n", rank, coords[0], coords[1]);
+	for(i = 0; i < size; i++){
+		for(j = 0; j < size; j++){
+			index = (int)(i*size + j);
+        		fprintf(stdout, "%f ", C[index]);
+		}
+
+		fprintf(stdout, "\n");
+  	}
+	fprintf(stdout, "\n");
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+  	//Start the timer 	
+ 	MPI_Barrier(MPI_COMM_WORLD);
+  	if (rank == 0) {  
+    		start_time = MPI_Wtime();
+  	}
+
+	
+	#ifdef outerproduct_v1
+		int myrow = coords[0];
+		int mycolumn = coords[1];
+		int rowSize = size;
+		int columSize = rowSize;
+		int coordsTemp[2];
+		int coordsTemp2[2];
+		int rankTemp = 0;
+		int rankTemp2 = 0;
+		//matrix multiply index for the associated matrices
+		int indexA = 0;
+		int indexB = 0;
+		int indexC = 0;
+		MPI_Request request1 = MPI_REQUEST_NULL;
+		MPI_Request request2 = MPI_REQUEST_NULL;
+		//matrix multiply indexs
+		int q,w,e,t;
+		long sumC = 0;
+		//temp storage
+		double* tempA=bufferA;
+		double* tempB=bufferB;
+		
+		for(k = 0; k < p; k++){		 		
+			for(i = 0; i < grid_size[0]; i++){
+				//populate buffers
+				bufferA=A;
+				bufferB=B;
+				
+
+				//Broadcast A to processors in same column.
+				//coordinates of process
+				coordsTemp[0] = myrow;
+				coordsTemp[1] = i;
+				MPI_Cart_rank(MPI_COMM_WORLD, coordsTemp, &rankTemp);
+
+ 
+
+				//coordinates = rank's own coordinates, skip. Destination must be same row
+				if(rank != rankTemp){
+					MPI_Isend(bufferA, sizeSqI, MPI_DOUBLE, rankTemp, 0, MPI_COMM_WORLD, &request1);
+					
+
+					#ifdef debug				
+						fprintf(stdout, "k = %d, i = %d, rankTemp1 = %d\n", k, i, rankTemp);
+						fprintf(stdout, "k = %d, rank = %d, sent bufferA to ranktemp1 = %d\n", k, rank, rankTemp);
+						for(q = 0; q < size; q++){
+							for(j = 0; j < size; j++){
+								index = (int)(q*size + j);
+        							fprintf(stdout, "%f ", bufferA[index]);
+							}	
+							fprintf(stdout, "\n");
+  						}
+						fprintf(stdout, "\n");
+					#endif
+				}
+				
+				//Broadcast B to processors in same row.
+				//coordinates of process
+				coordsTemp2[0] = i;
+				coordsTemp2[1] = mycolumn;
+				MPI_Cart_rank(MPI_COMM_WORLD, coordsTemp2, &rankTemp2);
+
+				//coordinates = rank's own coordinates, skip. Destination must be same column
+				if(rank != rankTemp2){
+					MPI_Isend(bufferB, sizeSqI, MPI_DOUBLE, rankTemp2, 1, MPI_COMM_WORLD, &request2);
+					
+					
+					#ifdef debug				
+						fprintf(stdout, "i = %d, k = %d, rankTemp2 = %d\n", i, k, rankTemp2);
+						fprintf(stdout, "k = %d, rank = %d, sent bufferB to rankTemp2 = %d\n", k, rank, rankTemp2);
+						for(q = 0; q < size; q++){
+							for(j = 0; j < size; j++){
+								index = (int)(q*size + j);
+        							fprintf(stdout, "%f ", bufferB[index]);
+							}
+							fprintf(stdout, "\n");
+  						}
+						fprintf(stdout, "\n");
+					#endif
+				}
+				
+				//reset buffer
+				bufferA=tempA;
+				bufferB=tempB;
+	 		}
+
+			if(myrow == k && mycolumn == k){			
+				//memcpy(&bufferA, &A, sizeof(A));
+				//memcpy(&bufferB, &B, sizeof(B));
+
+				//populate buffers
+				bufferA=A;
+				bufferB=B;
+			}			
+
+			else if(myrow == k){
+				//Receive bufferA
+				//coordinates of process
+				coordsTemp2[0] = myrow;
+				coordsTemp2[1] = k;
+				MPI_Cart_rank(MPI_COMM_WORLD, coordsTemp2, &rankTemp2);
+				
+				MPI_Irecv(bufferA, sizeSqI, MPI_DOUBLE, rankTemp2, 0, MPI_COMM_WORLD, &request1);
+				MPI_Wait(&request1, MPI_STATUS_IGNORE);
+
+				//memcpy(&bufferB, &B, sizeof(B));
+
+				//populate buffers
+				bufferB=B;
+			}
+			
+			else if(mycolumn == k){
+				//Receive bufferB
+				//coordinates of process
+				coordsTemp2[0] = k;
+				coordsTemp2[1] = mycolumn;
+				MPI_Cart_rank(MPI_COMM_WORLD, coordsTemp2, &rankTemp2);
+
+				MPI_Irecv(bufferB, sizeSqI, MPI_DOUBLE, rankTemp2, 1, MPI_COMM_WORLD, &request2);
+				MPI_Wait(&request2, MPI_STATUS_IGNORE);
+
+				//memcpy(&bufferA, &A, sizeof(A));
+
+				//populate buffers
+				bufferA=A;
+			}
+
+			else{
+				//Receive bufferA
+				//coordinates of process
+				coordsTemp2[0] = myrow;
+				coordsTemp2[1] = k;
+				MPI_Cart_rank(MPI_COMM_WORLD, coordsTemp2, &rankTemp2);
+				
+				MPI_Irecv(bufferA, sizeSqI, MPI_DOUBLE, rankTemp2, 0, MPI_COMM_WORLD, &request1);
+				MPI_Wait(&request1, MPI_STATUS_IGNORE);
+
+
+				//Receive bufferB
+				//coordinates of process
+				coordsTemp2[0] = k;
+				coordsTemp2[1] = mycolumn;
+				MPI_Cart_rank(MPI_COMM_WORLD, coordsTemp2, &rankTemp2);
+
+				MPI_Irecv(bufferB, sizeSqI, MPI_DOUBLE, rankTemp2, 1, MPI_COMM_WORLD, &request2);
+				MPI_Wait(&request2, MPI_STATUS_IGNORE);
+			}	
+
+				#ifdef debug
+				fprintf(stdout, "k = %d, rank = %d, bufferA\n", k, rank);
+				for(i = 0; i < size; i++){
+					for(j = 0; j < size; j++){
+						index = (int)(i*size + j);
+        					fprintf(stdout, "%f ", bufferA[index]);
+					}
+					fprintf(stdout, "\n");
+  				}
+				fprintf(stdout, "\n");
+
+				fprintf(stdout, "k = %d, rank = %d, bufferB\n", k, rank);
+				for(i = 0; i < size; i++){
+					for(j = 0; j < size; j++){
+						index = (int)(i*size + j);
+        					fprintf(stdout, "%f ", bufferB[index]);
+					}
+					fprintf(stdout, "\n");
+  				}
+				fprintf(stdout, "\n");
+				#endif
+
+				//matrix multiply
+				for(q = 0; q < size; q++){
+					for(w = 0; w < size; w++){
+						for(e = 0; e < size; e++){
+							indexC = w*size + e;
+							indexA = w*size + q;
+							indexB = q*size + e;
+							C[indexC] += bufferA[indexA] * bufferB[indexB];			
+						}
+					}
+				}
+				
+				//reset buffer
+				bufferA=tempA;
+				bufferB=tempB;	
+		}
+
+		
+		//sum C matric elements
+		double soln = 0;
+		for(i = 0; i < sizeSqI; i++){
+			sumC += C[i];
+		}
+
+		#ifdef debug
+			fprintf(stdout, "rank = %d, sumC = %lu \n", rank, sumC);
+		#endif
+
+		long results[1] = {sumC};
+		long recvBuff[1];
+		MPI_Reduce(results, recvBuff, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+		//MPI_Barrier(MPI_COMM_WORLD);
+		if(rank == 0){
+			//calculate soln
+			soln = pow(N, 3.0) * pow((N - 1), 2.0) / 2.0;
+			
+			fprintf(stdout, "soln = %f \n", soln);
+			fprintf(stdout, "sumC = %lu \n", recvBuff[0]);
+			fprintf(stdout,"calculation time = %s%.3lfs \n",message_string,MPI_Wtime() - start_time);
+
+			if((int)soln == recvBuff[0]){
+				fprintf(stdout, "matrix multiply is correct.\n");
+			}
+
+			else{
+				fprintf(stdout, "matrix multiply is not correct.\n");
+			}
+		}		
+	#endif
+  }	
+
+
+
+
+  
+  /////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////// TO IMPLEMENT: END /////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
+ 
+  // All processes send checksums back to the root, which checks for consistency
+  //char all_ok = 1;
+  if (0 == rank) {
+    //for (j = 1; j < num_procs; j++) {
+      //int received_checksum;
+      //MPI_Recv(&received_checksum, 1, MPI_INT, MPI_ANY_SOURCE, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      // Print a single message in case of a mismatch, but continue
+      // receiving other checksums to ensure that all processes
+      // reach the MPI_Finalize()
+      //if ((all_ok == 1) && (checksum != received_checksum)) {
+	//fprintf(stderr,"\t** Non-matching checksum! **\n");
+	//all_ok = 0;
+	
+	//#ifdef debug
+		//fprintf(stderr,"\t** Errored at j=%d **\n", j);
+	//#endif
+	//break;
+      //}
+    //}
+  } else {
+    //int checksum=0;
+    //for (j = 0; j < NUM_BYTES; j++) {
+      //checksum += buffer[j];
+    //}
+    //MPI_Send(&checksum, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+  }
+
+  // Print out string message and wall-clock time if the broadcast was
+  // successful
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (0 == rank) {
+    //fprintf(stdout,"%s%.3lf\n",message_string,MPI_Wtime() - start_time);
+  }
+
+  // Clean-up
+  //free(buffer);
+  MPI_Finalize();
+
+  return 0;
+}

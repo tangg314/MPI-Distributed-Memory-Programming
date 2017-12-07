@@ -1,0 +1,1 @@
+[/usr/local/bin/smpirun] ** error: the file './cluster_1600.xml' does not exist. Aborting.

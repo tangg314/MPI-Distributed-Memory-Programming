@@ -1,0 +1,1 @@
+smpirun --cfg=smpi/bcast:mpich --cfg=smpi/running_power:0.054Gf -np 1 -platform ./cluster_1600.xml -hostfile ./hostfile_1600 ./matmul_outerproduct_v1 >> result1.txt

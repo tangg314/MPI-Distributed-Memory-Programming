@@ -1,0 +1,31 @@
+#!/bin/bash
+
+for t in `seq 1 5`;
+do
+	./script1
+done
+
+for t in `seq 1 5`;
+do
+	./script4
+done
+
+for t in `seq 1 5`;
+do
+	./script16
+done
+
+for t in `seq 1 5`;
+do
+	./script64
+done
+
+for t in `seq 1 5`;
+do
+	./script100
+done
+
+for t in `seq 1 5`;
+do
+	./script400
+done

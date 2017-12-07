@@ -1,0 +1,16 @@
+PROGRAM=matmul_init
+CC=smpicc
+choice=outerproduct_v1
+N=1600
+CFLAGS= -D N=$(N) -D $(choice)
+OFLAG= 
+
+default: clean $(PROGRAM)
+
+clean:
+	rm -f $(PROGRAM)
+
+$(PROGRAM): $(PROGRAM).c
+	$(CC) $(CFLAGS) $(OFLAG) $(PROGRAM).c -o matmul_$(choice) -lm
+	
+	
